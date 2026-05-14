@@ -1,0 +1,59 @@
+#!/bin/bash
+# ==============================================================================
+# EnvForge Repair Script — Pip Package Reinstall
+# Generated: {{ generated_at }}
+# EnvForge : v{{ envforge_version }}
+#
+# This script reinstalls specified pip packages with correct versions.
+# It uses --force-reinstall to ensure clean installations.
+#
+# ⚠ WARNING: Review this script before running.
+#
+# Usage:
+#   chmod +x repair_pip_reinstall.sh && ./repair_pip_reinstall.sh
+# ==============================================================================
+
+set -euo pipefail
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+info()  { echo -e "${GREEN}[EnvForge Repair]${NC} $1"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
+error() { echo -e "${RED}[ERROR]${NC} $1" >&2; exit 1; }
+
+echo ""
+info "EnvForge Pip Reinstall Repair Script"
+echo ""
+
+# ── Step 1: Check we're in a venv ─────────────────────────────────────────────
+info "Step 1/3: Checking Python environment..."
+if [ -z "${VIRTUAL_ENV:-}" ]; then
+    warn "Not running inside a virtual environment."
+    read -p "Continue anyway? [y/N]: " CONFIRM
+    if [[ "${CONFIRM,,}" != "y" ]]; then
+        info "Aborted. Activate a venv first: source .venv/bin/activate"
+        exit 0
+    fi
+fi
+
+PYTHON_VER=$(python3 --version 2>&1)
+PIP_VER=$(pip --version 2>&1)
+info "Python: $PYTHON_VER"
+info "pip: $PIP_VER"
+
+# ── Step 2: Reinstall packages ────────────────────────────────────────────────
+info "Step 2/3: Reinstalling packages..."
+
+{% for pkg in packages %}
+info "Installing {{ pkg.name }}{% if pkg.version %}=={{ pkg.version }}{% endif %}..."
+pip install --force-reinstall{% if pkg.index_url %} --index-url {{ pkg.index_url }}{% endif %} "{{ pkg.pip_spec }}"
+{% endfor %}
+
+# ── Step 3: Verify ────────────────────────────────────────────────────────────
+info "Step 3/3: Verifying installations..."
+
+{% for pkg in packages %}
+pip show {{ pkg.name }} 2>/dev/null | grep -E "^(Name|Version):" || warn "{{ pkg.name }} not found"
+{% endfor %}
+
+echo ""
+info "Repair script complete. All packages reinstalled."

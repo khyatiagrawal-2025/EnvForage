@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `AITroubleshootService` orchestrator — full pipeline: prompt build → LLM call → safety filter → DB persist → audit log.
   - `POST /api/v1/troubleshoot` endpoint with structured error handling (503 for LLM errors, 500 for safety violations).
   - Registered troubleshoot router in FastAPI app.
+- **Phase 4 — Part 4**: Repair Script Generation.
+  - `RepairService` — maps AI-suggested template IDs to Jinja2 repair scripts, renders with validated params, safety-filters output.
+  - 5 repair Jinja2 templates: `repair_cuda_upgrade`, `repair_python_install`, `repair_driver_update`, `repair_venv_recreate`, `repair_pip_reinstall`.
+  - `POST /api/v1/repair` endpoint — generates repair scripts from template ID + params.
+  - `GET /api/v1/repair/templates` endpoint — lists available repair templates.
+  - All repair scripts include user confirmation prompts before making changes.
 
 ## [0.3.0] - 2026-05-14
 

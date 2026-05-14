@@ -128,7 +128,7 @@ on Windows, WSL2, and Ubuntu 22.04. ✅
 - [x] `SuggestedFix` response schema (Pydantic)
 - [x] Shell command safety filter
 - [x] `POST /api/troubleshoot` endpoint
-- [ ] `POST /api/repair` endpoint (generates repair scripts)
+- [x] `POST /api/repair` endpoint (generates repair scripts)
 - [ ] Frontend AI chat interface
 - [ ] Rate limiting (Redis-based, Phase 4.5)
 

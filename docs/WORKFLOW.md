@@ -174,44 +174,101 @@ DiagnosticReport JSON (stdout or --output report.json)
 
 ---
 
-## Workflow 3: AI Troubleshooting 🔲 (Phase 4)
+## Workflow 3: AI Troubleshooting (Backend ✅ — Phase 4)
 
-**Not yet implemented.** The AI model skeleton (`SuggestedFix`, `TroubleshootResponse`,
-`LLMProvider` ABC, `MockProvider`) is in place. Full integration is Phase 4.
+The AI troubleshooting pipeline is fully implemented on the backend.
+Frontend integration is Part 6 of Phase 4.
 
-### Planned Flow
+### Backend Flow
 
 ```
-(Requires Phase 2 CLI Agent + Phase 5 Verification)
-
-envforge diagnose --send      → report_id
-envforge verify --profile pytorch-cuda → verification_id
+User submits diagnostic data + profile context
     │
     ▼
 POST /api/v1/troubleshoot
-  { "diagnostic_report_id": "...", "verification_id": "...", "user_description": "..." }
-    │
-    ├── Structured TroubleshootRequest built (sanitized context — NOT raw text)
-    ├── LLMProvider.complete(system_prompt, context, TroubleshootResponse)
-    ├── SafetyFilter.validate(ai_response)
-    └── SuggestedFix list returned (ordered steps, safe_commands only)
+{
+  "diagnostic": { ... DiagnosticReport JSON ... },
+  "profile_slug": "pytorch-cuda",
+  "user_description": "torch.cuda.is_available() returns False"
+}
     │
     ▼
-POST /api/v1/repair  (if repair script requested)
-  { "session_id": "...", "approved_steps": [1, 2] }
+AITroubleshootService pipeline:
+  1. TroubleshootPromptBuilder → structured user message
+     (injects CUDA matrix, profile context, sanitised user input)
+  2. LLMProvider.complete(system_prompt, user_msg, TroubleshootResponse)
+  3. SafetyFilter.validate(root_cause, fix descriptions, safe_commands)
+  4. Persist AISession + AISuggestions to DB
+  5. Write AIAuditLog (input hash, safety status, tokens, latency)
     │
-    └── Template Engine renders repair script (NOT raw AI text)
-        └── SafetyFilter validates output
+    ▼
+Response 201:
+{
+  "session_id": "uuid",
+  "root_cause": "CUDA 10.2 is not supported by PyTorch 2.3...",
+  "suggested_fixes": [
+    {
+      "step": 1,
+      "title": "Upgrade CUDA toolkit",
+      "description": "Your CUDA 10.2 is below the minimum...",
+      "severity": "CRITICAL",
+      "safe_commands": ["nvcc --version", "nvidia-smi"],
+      "repair_template_id": "repair_cuda_upgrade"
+    }
+  ],
+  "repair_script_available": true,
+  "confidence": 0.85,
+  "disclaimer": "AI suggestions are advisory only..."
+}
 ```
+
+### Repair Script Flow
+
+```
+User clicks "Generate Repair Script" on a suggested fix
+    │
+    ▼
+POST /api/v1/repair
+{
+  "template_id": "repair_cuda_upgrade",
+  "params": { "target_cuda_version": "12.1" }
+}
+    │
+    ▼
+RepairService:
+  1. Look up Jinja2 template: repair/repair_cuda_upgrade.sh.j2
+  2. Render with validated params
+  3. SafetyFilter validates rendered output
+    │
+    ▼
+Response 201:
+{
+  "template_id": "repair_cuda_upgrade",
+  "filename": "repair_cuda_upgrade.sh",
+  "content": "#!/bin/bash\n# EnvForge Repair Script...",
+  "size_bytes": 2048,
+  "disclaimer": "Review carefully before executing."
+}
+```
+
+### Available Repair Templates
+
+| Template ID | Description |
+|-------------|-------------|
+| `repair_cuda_upgrade` | Upgrade CUDA toolkit to a supported version |
+| `repair_python_install` | Install or switch Python version (pyenv/system) |
+| `repair_driver_update` | Check and guide NVIDIA driver update |
+| `repair_venv_recreate` | Back up and recreate Python virtual environment |
+| `repair_pip_reinstall` | Force-reinstall pip packages with correct versions |
 
 ### AI Providers (Pluggable via `ENVFORGE_LLM_PROVIDER` env var)
 
 | Provider | Status | Use Case |
 |----------|--------|---------|
 | `mock` | ✅ Implemented | Development / testing |
-| `openai` | 🔲 Phase 4 | Production (GPT-4o) |
-| `openrouter` | 🔲 Phase 4 | Multi-model routing |
-| `ollama` | 🔲 Phase 4 | Air-gapped / local inference |
+| `openrouter` | ✅ Implemented | Production — routes to 100+ models (GPT-4o, Llama 3, etc.) |
+| `openai` | 🔲 Planned | Use OpenRouter with `openai/gpt-4o` model instead |
+| `ollama` | 🔲 Planned | Air-gapped / local inference |
 
 ---
 

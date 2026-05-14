@@ -288,6 +288,9 @@ are Phase 5 deliverables.
 - `backend/app/ai/prompts/troubleshoot.py` — `TroubleshootPromptBuilder` (diagnostic → LLM user message)
 - `backend/app/ai/service.py` — `AITroubleshootService` orchestrator (pipeline: prompt → LLM → safety → persist)
 - `backend/app/api/v1/troubleshoot.py` — `POST /api/v1/troubleshoot` endpoint
+- `backend/app/services/repair_service.py` — `RepairService` (template ID → rendered repair script)
+- `backend/app/api/v1/repair.py` — `POST /api/v1/repair` + `GET /api/v1/repair/templates`
+- `backend/app/templates/jinja/repair/` — 5 repair Jinja2 templates (CUDA upgrade, Python install, driver update, venv recreate, pip reinstall)
 
 ### AI Provider Interface
 
