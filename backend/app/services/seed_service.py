@@ -44,7 +44,11 @@ async def seed_profiles(db: AsyncSession) -> None:
         return
 
     try:
-        data = yaml.safe_load(profiles_file.read_text(encoding="utf-8"))
+        raw_text = profiles_file.read_text(encoding="utf-8")
+        data = yaml.safe_load(raw_text)
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"[seed] Failed to read profiles.yaml: {exc}")
+        return
     except yaml.YAMLError as exc:
         print(f"[seed] Failed to parse profiles.yaml: {exc}")
         return

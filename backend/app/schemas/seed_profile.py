@@ -37,7 +37,9 @@ class ProfileSeedSchema(BaseModel):
     def normalize_description(cls, value: object) -> str:
         if value is None:
             return ""
-        return str(value).strip()
+        if not isinstance(value, str):
+            raise ValueError("description must be a string")
+        return value.strip()
 
     @field_validator("os_support")
     @classmethod

@@ -71,6 +71,13 @@ def test_invalid_status_raises():
         ProfileSeedSchema.model_validate(data)
 
 
+def test_non_string_description_raises():
+    data = _valid_profile()
+    data["description"] = ["not", "a", "string"]
+    with pytest.raises(ValidationError):
+        ProfileSeedSchema.model_validate(data)
+
+
 def test_profiles_yaml_root_schema():
     root = ProfilesYamlSchema.model_validate(
         {"profiles": [_valid_profile()]}
