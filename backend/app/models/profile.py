@@ -2,6 +2,7 @@
 import uuid
 from datetime import date, datetime
 
+from app.models.script_job import ScriptGenerationJob
 from sqlalchemy import (
     Boolean,
     Date,
@@ -51,7 +52,7 @@ class EnvironmentProfile(Base):
     packages: Mapped[list["ProfilePackage"]] = relationship(
         "ProfilePackage", back_populates="profile", cascade="all, delete-orphan"
     )
-    generation_jobs: Mapped[list["ScriptGenerationJob"]] = relationship(
+    generation_jobs: Mapped[list["ScriptGenerationJob"]] = relationship(  # noqa: F821
         "ScriptGenerationJob", back_populates="profile"
     )
 
