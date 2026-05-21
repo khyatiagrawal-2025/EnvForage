@@ -25,7 +25,7 @@ Please read the [Code of Conduct](./CODE_OF_CONDUCT.md) to keep our community ap
    ```bash
    # Recommended: Install globally
    pipx install pre-commit
-   
+
    # From the repo root, install the hooks
    pre-commit install
    ```
