@@ -8,7 +8,7 @@ Never raises — returns empty list if nvidia-smi is not available.
 from __future__ import annotations
 
 import re
-import logging;
+import logging
 import subprocess
 from typing import NamedTuple
 logger = logging.getLogger(__name__)
