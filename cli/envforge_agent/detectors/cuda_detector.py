@@ -236,8 +236,7 @@ def _parse_cudnn_header(header_path: Path) -> str | None:
 def _detect_cudnn_via_torch() -> str | None:
     """Try importing PyTorch to get cuDNN version."""
     try:
-        import subprocess
-        import sys
+        import subprocess, sys
         result = subprocess.run(
             [sys.executable, "-c",
              "import torch; print(torch.backends.cudnn.version())"],
@@ -275,8 +274,7 @@ def _detect_nccl(toolkit_path: str | None) -> str | None:
 
     # Fallback: PyTorch
     try:
-        import subprocess
-        import sys
+        import subprocess, sys
         result = subprocess.run(
             [sys.executable, "-c", "import torch; print(torch.cuda.nccl.version())"],
             capture_output=True, text=True, timeout=10,

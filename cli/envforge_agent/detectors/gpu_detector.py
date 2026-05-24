@@ -7,7 +7,9 @@ Never raises — returns empty list if nvidia-smi is not available.
 """
 from __future__ import annotations
 
+import re
 import subprocess
+from typing import NamedTuple
 
 from envforge_agent.schemas import GPUInfo
 
