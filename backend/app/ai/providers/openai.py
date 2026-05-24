@@ -105,7 +105,7 @@ class OpenAIProvider(LLMProvider):
     ) -> AsyncIterator[str]:
         """
         Send a completion request to OpenAI and stream the response content.
-        This generator yields tokens as they arrive.
+        This generator yields tokens as they arrive with resilient transient error handling.
         """
         schema_json = json.dumps(response_model.model_json_schema(), indent=2)
         enhanced_system = (
@@ -128,9 +128,10 @@ class OpenAIProvider(LLMProvider):
         }
 
         async def generator() -> AsyncIterator[str]:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                max_retries = 3
+            max_retries = 3
+            base_delay = 2.0
 
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 for attempt in range(max_retries):
                     try:
                         async with client.stream(
@@ -141,18 +142,16 @@ class OpenAIProvider(LLMProvider):
                         ) as response:
                             if response.status_code == 429:
                                 retry_after = response.headers.get("Retry-After")
-
                                 if retry_after and retry_after.isdigit():
                                     delay = int(retry_after)
                                 else:
-                                    delay = 2**attempt
+                                    delay = base_delay**attempt
 
                                 logger.warning(
-                                    "OpenAI rate limited. Retrying in %s seconds...",
-                                    delay,
+                                    "OpenAI rate limited (429). Retrying in %s seconds... (Attempt %d/%d)",
+                                    delay, attempt + 1, max_retries
                                 )
 
-                                # Short-circuit immediately on the final attempt to avoid trailing latency
                                 if attempt >= max_retries - 1:
                                     raise LLMProviderError(
                                         "openai",
@@ -164,7 +163,6 @@ class OpenAIProvider(LLMProvider):
 
                             if response.status_code != 200:
                                 error_body = await response.aread()
-
                                 raise LLMProviderError(
                                     "openai",
                                     f"HTTP {response.status_code}: {error_body.decode(errors='replace')[:500]}",
@@ -175,33 +173,40 @@ class OpenAIProvider(LLMProvider):
                                     continue
 
                                 data_str = line[6:].strip()
-
                                 if data_str == "[DONE]":
                                     break
 
                                 try:
                                     data = json.loads(data_str)
-
                                     choices = data.get("choices", [])
-
                                     if choices:
                                         delta = choices[0].get("delta", {})
                                         content = delta.get("content", "")
-
                                         if content:
                                             yield content
-
                                 except json.JSONDecodeError:
                                     continue
 
+                            # Stream completed successfully, return to exit the generator loop
                             return
 
                     except httpx.HTTPError as e:
-                        raise LLMProviderError(
-                            "openai",
-                            f"Streaming connection error: {str(e)}",
-                        ) from e
+                        # If this is our last attempt, don't sleep; let the loop finish and drop to final exception
+                        if attempt >= max_retries - 1:
+                            logger.error(
+                                "Transient network connection error on final attempt: %s.", str(e)
+                            )
+                            break
 
+                        delay = base_delay**attempt
+                        logger.warning(
+                            "Transient network error during OpenAI stream: %s. Retrying in %d seconds... (Attempt %d/%d)",
+                            str(e), delay, attempt + 1, max_retries
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+
+                # This is reached if loop finishes completely without returning or hitting a short-circuit raise
                 raise LLMProviderError(
                     "openai",
                     "OpenAI streaming failed after maximum retry attempts.",
