@@ -34,7 +34,7 @@ def test_default_rendering_without_custom_dir():
     """Verify that when no custom_template_dir is defined, default templates render normally."""
     context = make_context(profile_name="default-test", python_version="3.10")
     renderer = TemplateRenderer()
-    
+
     result = renderer.render("environment.yml", context)
     assert "default-test" in result.content
     assert "python=3.10" in result.content
@@ -46,23 +46,23 @@ def test_custom_template_override_precedence(tmp_path):
     custom_dir = tmp_path / "custom_templates"
     config_dir = custom_dir / "config"
     config_dir.mkdir(parents=True)
-    
+
     custom_template = config_dir / "environment.yml.j2"
     custom_template.write_text(
         "name: OVERRIDDEN_{{ profile.name }}\ncustom_indicator: yes",
         encoding="utf-8"
     )
-    
+
     # 2. Mock get_settings() inside engine.py to return our custom_template_dir
     mock_settings = MagicMock(spec=Settings)
     mock_settings.custom_template_dir = custom_dir
-    
+
     context = make_context(profile_name="myenv")
     renderer = TemplateRenderer()
-    
+
     with patch("app.templates.engine.get_settings", return_value=mock_settings):
         result = renderer.render("environment.yml", context)
-        
+
     assert "OVERRIDDEN_myenv" in result.content
     assert "custom_indicator: yes" in result.content
     # The default template contents should NOT be present
@@ -74,22 +74,22 @@ def test_custom_templates_subject_to_sandbox_hardening(tmp_path):
     custom_dir = tmp_path / "custom_templates"
     config_dir = custom_dir / "config"
     config_dir.mkdir(parents=True)
-    
+
     # Create an unsafe custom template attempting SSTI
     unsafe_template = config_dir / "environment.yml.j2"
     unsafe_template.write_text(
         "name: {{ ''.__class__ }}",
         encoding="utf-8"
     )
-    
+
     mock_settings = MagicMock(spec=Settings)
     mock_settings.custom_template_dir = custom_dir
-    
+
     context = make_context(profile_name="myenv")
     renderer = TemplateRenderer()
-    
+
     with patch("app.templates.engine.get_settings", return_value=mock_settings):
         with pytest.raises(SecurityError) as exc_info:
             renderer.render("environment.yml", context)
-            
+
     assert "access to attribute" in str(exc_info.value) or "is blocked" in str(exc_info.value)
