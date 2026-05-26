@@ -287,3 +287,4 @@ class DiagnoseResponse(BaseModel):
         description="General compatibility recommendations.",
         examples=[["Upgrade NVIDIA driver to latest stable release"]],
     )
+    

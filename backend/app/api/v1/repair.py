@@ -182,3 +182,4 @@ async def list_repair_templates() -> RepairTemplateListResponse:
     return RepairTemplateListResponse(
         templates=[RepairTemplateInfo(**t) for t in templates]
     )
+

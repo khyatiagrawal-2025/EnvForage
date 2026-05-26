@@ -267,3 +267,4 @@ class ProfileFilters(BaseModel):
         description="Maximum number of profiles returned per page.",
         examples=[20],
     )
+    

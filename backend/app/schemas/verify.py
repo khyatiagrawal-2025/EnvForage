@@ -102,3 +102,4 @@ class VerificationResponse(BaseModel):
             }
         },
     )
+    
