@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api.deps import DB
 from app.compatibility.errors import (
@@ -13,6 +13,7 @@ from app.compatibility.errors import (
 )
 from app.compatibility.models import OSTarget, PackageConstraint
 from app.compatibility.resolver import CompatibilityResolver
+from app.middleware.rate_limit import general_rate_limit
 from app.models.diagnostic import DiagnosticReport
 from app.schemas.diagnostic import (
     CompatibilityIssue,
@@ -45,6 +46,7 @@ router = APIRouter()
 async def diagnose(
     report: DiagnosticReportSchema,
     db: DB,
+    _rate_limit: None = Depends(general_rate_limit),
 ) -> DiagnoseResponse:
     """
     Accept a DiagnosticReport from the CLI agent and return
