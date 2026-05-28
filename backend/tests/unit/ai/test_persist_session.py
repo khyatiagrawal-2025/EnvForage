@@ -66,7 +66,7 @@ async def test_persist_session_calls_rollback_on_db_error():
             model_name="test-model",
         )
 
-    db.rollback.assert_awaited_once()
+    assert db.rollback.call_count == 3
 
 
 @pytest.mark.asyncio
@@ -106,7 +106,7 @@ async def test_persist_session_logs_full_traceback_on_error():
             )
 
         # logger.exception includes exc_info=True automatically
-        mock_logger.exception.assert_called_once()
+        assert mock_logger.exception.call_count == 3
         # logger.error must NOT be used (it drops the traceback)
         mock_logger.error.assert_not_called()
 

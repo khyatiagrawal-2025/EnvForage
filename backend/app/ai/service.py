@@ -346,7 +346,7 @@ class AITroubleshootService:
                 await db.rollback()
                 # 1. Use logger.exception to capture the full traceback
 
-                logger.error(
+                logger.exception(
                     "Failed to persist AI session " "(attempt %d/%d): %s",
                     attempt + 1,
                     max_retries,
