@@ -12,13 +12,14 @@ Sources:
 """
 import json
 from pathlib import Path
+
 from app.compatibility.models import FrameworkVersionEntry
 
 # ── Framework Version → Python Compatibility ──────────────────────────────────
 
 MATRIX_JSON_PATH = Path(__file__).resolve().parent / "python_matrix_data.json"
 
-with open(MATRIX_JSON_PATH, "r") as f:
+with open(MATRIX_JSON_PATH) as f:
     _raw_data = json.load(f)
 
 PYTHON_MATRIX: dict[str, list[FrameworkVersionEntry]] = {}
