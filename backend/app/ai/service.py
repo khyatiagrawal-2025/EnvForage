@@ -159,7 +159,6 @@ class AITroubleshootService:
         )
 
         return llm_result
-    
     async def stream_troubleshoot(
         self,
         request: TroubleshootRequest,

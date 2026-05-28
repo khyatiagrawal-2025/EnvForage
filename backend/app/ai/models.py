@@ -13,10 +13,16 @@ Changes (Confidence Scoring Issue):
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator, ValidationInfo
-from typing import Any
+from pydantic import (
+    BaseModel,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
+
 # Confidence primitives
 
 class FixConfidenceLevel(StrEnum):

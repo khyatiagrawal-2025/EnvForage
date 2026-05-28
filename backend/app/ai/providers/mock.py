@@ -6,9 +6,9 @@ Scenarios:
   "mixed" → HIGH + MEDIUM + LOW fixes (tests full pipeline)
   "gate"  → score below LOW_CONFIDENCE_GATE (tests suppression)
 """
+import uuid
 from collections.abc import AsyncIterator
 from typing import TypeVar
-import uuid
 
 from pydantic import BaseModel
 
@@ -18,6 +18,7 @@ from ..models import (
     TroubleshootResponse,
 )
 from .base import LLMProvider
+
 T = TypeVar("T", bound=BaseModel)
 _HIGH_FIXES = [
     SuggestedFix(
@@ -150,4 +151,4 @@ class MockProvider(LLMProvider):
         response_model: type[T],
     )-> AsyncIterator[str]:
         raise NotImplementedError("MockProvider does not support streaming")
-        yield ""    
+        yield ""
