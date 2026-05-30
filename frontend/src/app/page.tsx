@@ -123,7 +123,7 @@ export default function HomePage() {
                     left: "-2%", 
                     right: "-2%", 
                     height: "40%", 
-                    background: "var(--brand-secondary)", 
+                    background: "var(--border-strong)", 
                     zIndex: -1 
                   }}
                 />
