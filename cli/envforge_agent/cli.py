@@ -17,6 +17,7 @@ from pathlib import Path
 import asyncio
 
 import click
+import asyncio
 import httpx
 from rich.console import Console
 from rich.panel import Panel
@@ -174,7 +175,7 @@ async def _diagnose(output: str | None, send: bool, api_url: str, quiet: bool, s
 
     # ── Send to API ─────────────────────────────────────────────────────────
     if send:
-        _send_report(report, api_url, quiet)
+        await _send_report(report, api_url, quiet)
 
 
 def _print_report_summary(report: DiagnosticReport) -> None:
@@ -252,19 +253,20 @@ def _print_report_summary(report: DiagnosticReport) -> None:
     console.print(table)
 
 
-def _send_report(report: DiagnosticReport, api_url: str, quiet: bool) -> None:
+async def _send_report(report: DiagnosticReport, api_url: str, quiet: bool) -> None:
     """POST the DiagnosticReport to the EnvForge API."""
     url = f"{api_url.rstrip('/')}/api/v1/diagnose"
     if not quiet:
         console.print(f"\n[bold]Sending report to[/] {url} ...")
 
     try:
-        response = httpx.post(
-            url,
-            content=report.to_json(),
-            headers={"Content-Type": "application/json"},
-            timeout=30,
-        )
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                content=report.to_json(),
+                headers={"Content-Type": "application/json"},
+                timeout=30,
+            )
         response.raise_for_status()
         result = response.json()
 
@@ -526,6 +528,9 @@ def _print_verification_summary(data: dict, is_gpu_profile: bool) -> None:
     help="Preview the names of the scripts and resolved packages without printing their full contents.",
 )
 def fix(report: str, profile: str, api_url: str, dry_run: bool) -> None:
+    asyncio.run(_fix(report, profile, api_url, dry_run))
+
+async def _fix(report: str, profile: str, api_url: str, dry_run: bool) -> None:
     """
     Generate a repair script based on a saved diagnostic report.
 
@@ -554,7 +559,8 @@ def fix(report: str, profile: str, api_url: str, dry_run: bool) -> None:
     }
 
     try:
-        response = httpx.post(url, json=payload, timeout=30)
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload, timeout=30)
         response.raise_for_status()
         result = response.json()
 
@@ -708,6 +714,9 @@ def rollback() -> None:
     help="Base URL of the EnvForge API.",
 )
 def troubleshoot(api_url: str) -> None:
+    asyncio.run(_troubleshoot(api_url))
+
+async def _troubleshoot(api_url: str) -> None:
     """
     Send diagnostic report to AI troubleshoot endpoint
     and stream analysis results live to terminal.
@@ -725,30 +734,39 @@ def troubleshoot(api_url: str) -> None:
     console.print(f"\n[bold]Connecting to[/] {url}\n")
 
     try:
-        with httpx.stream(
-            "POST",
-            url,
-            json={
-                "diagnostic": report.model_dump(),
-                "user_description": "CLI troubleshoot request"
-            },
-            headers={
-                "Accept": "text/event-stream",
-            },
-            timeout=60,
-        ) as response:
+        async with httpx.AsyncClient() as client:
+            async with client.stream(
+                "POST",
+                url,
+                json={
+                    "diagnostic": report.model_dump(),
+                    "user_description": "CLI troubleshoot request"
+                },
+                headers={
+                    "Accept": "text/event-stream",
+                },
+                timeout=60,
+            ) as response:
 
-            response.raise_for_status()
-            console.print("[bold green]AI Troubleshooting Analysis[/]\n")
+                response.raise_for_status()
 
-            buffer = ""
-            for line in response.iter_lines():
-                if not line:
-                    continue
+                console.print("[bold green]AI Troubleshooting Analysis[/]\n")
 
-                if line.startswith("data: "):
-                    chunk = line.removeprefix("data: ")
-                    buffer += chunk
+                # Buffer streamed chunks
+                buffer = ""
+
+                async for line in response.aiter_lines():
+
+                    if not line:
+                        continue
+
+                    # SSE format: data: ...
+                    if line.startswith("data: "):
+
+                        chunk = line.removeprefix("data: ")
+
+                        # accumulate streamed fragments
+                        buffer += chunk
 
             try:
                 parsed = json.loads(buffer)
