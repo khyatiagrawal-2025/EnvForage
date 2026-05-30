@@ -69,6 +69,9 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(PayloadSizeLimitMiddleware)
 
+    # ── Prometheus Metrics ────────────────────────────────────
+    setup_metrics(app)
+
     # ── Routers ───────────────────────────────────────────────
     app.include_router(profiles.router, prefix="/api/v1", tags=["profiles"])
     app.include_router(scripts.router, prefix="/api/v1", tags=["scripts"])
