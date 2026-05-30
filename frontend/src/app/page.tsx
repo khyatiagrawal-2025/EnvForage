@@ -1,16 +1,17 @@
 "use client";
 
-import { motion, useScroll, useSpring } from "framer-motion";
+import { motion, useScroll, useSpring, useTransform } from "framer-motion";
 import Link from "next/link";
 import { Zap, Shield, Brain, Cpu, Database } from "lucide-react";
 
 export default function HomePage() {
-  const { scrollYProgress } = useScroll();
+  const { scrollYProgress, scrollY } = useScroll();
   const scaleX = useSpring(scrollYProgress, {
     stiffness: 100,
     damping: 30,
     restDelta: 0.001
   });
+  const heroY = useTransform(scrollY, [0, 1000], [0, 800]);
 
   const features = [
     {
@@ -72,20 +73,17 @@ export default function HomePage() {
         }}
       />
 
-      {/* Hero Section (Fixed Parallax Layer) */}
-      <div style={{ height: "calc(100vh - 80px)" }}>
-        <section
-          style={{
-            position: "fixed",
-            top: "80px", /* Below navbar */
-            left: 0,
-            right: 0,
-            height: "calc(100vh - 80px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1,
-            overflow: "hidden",
+      {/* Hero Section (Framer Motion Parallax Layer) */}
+      <motion.section
+        style={{
+          y: heroY,
+          position: "relative",
+          minHeight: "calc(100vh - 80px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1,
+          overflow: "hidden",
           background: "radial-gradient(circle at top left, rgba(34,197,94,0.15), transparent 30%), radial-gradient(circle at bottom right, rgba(59,130,246,0.15), transparent 30%), var(--bg-primary)",
         }}
       >
@@ -244,8 +242,7 @@ export default function HomePage() {
             </div>
           </motion.div>
         </div>
-      </section>
-    </div>
+        </motion.section>
 
       {/* OVERLAPPING CONTENT LAYER */}
       <div 
