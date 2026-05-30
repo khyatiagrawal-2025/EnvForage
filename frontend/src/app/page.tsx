@@ -98,7 +98,7 @@ export default function HomePage() {
             userSelect: "none"
           }}
         >
-          $ pip install envforage
+          $ pip install envforge-agent
         </div>
 
         <div className="container" style={{ maxWidth: "1200px", position: "relative", zIndex: 2 }}>
