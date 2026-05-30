@@ -79,7 +79,7 @@ export default function RootLayout({
           <Navbar />
 
           {/* Main Content */}
-          <main style={{ minHeight: "calc(100vh - 140px)" }}>
+          <main style={{ minHeight: "calc(100vh - 140px)", paddingTop: "76px" }}>
             {children}
           </main>
 
