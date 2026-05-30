@@ -155,17 +155,19 @@ class AITroubleshootService:
         if callable(token_usage):
             token_usage = token_usage()
 
-        if not isinstance(token_usage, dict):
-            token_usage = {}
+        total_tokens = 0
+        prompt_tokens = 0
+        completion_tokens = 0
 
-        try:
-            total_tokens = int(token_usage.get("total_tokens", 0))
-            prompt_tokens = int(token_usage.get("prompt_tokens", 0))
-            completion_tokens = int(token_usage.get("completion_tokens", 0))
-        except (TypeError, ValueError):
-            total_tokens = 0
-            prompt_tokens = 0
-            completion_tokens = 0
+        if isinstance(token_usage, dict):
+            t_val = token_usage.get("total_tokens", 0)
+            total_tokens = t_val if isinstance(t_val, int) else 0
+
+            p_val = token_usage.get("prompt_tokens", 0)
+            prompt_tokens = p_val if isinstance(p_val, int) else 0
+
+            c_val = token_usage.get("completion_tokens", 0)
+            completion_tokens = c_val if isinstance(c_val, int) else 0
 
         record_ai_token_usage(
             provider=provider_name,

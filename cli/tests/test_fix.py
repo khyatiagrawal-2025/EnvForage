@@ -7,7 +7,6 @@ consistent with the existing test_agent.py patterns.
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -54,7 +53,7 @@ class TestFixHappyPath:
     def test_fix_displays_script_content(self, valid_report, mock_api_success):
         """Standard run should print script content in a rich panel."""
         runner = CliRunner()
-        with patch("httpx.post", return_value=mock_api_success):
+        with patch("httpx.AsyncClient.post", return_value=mock_api_success):
             result = runner.invoke(cli, [
                 "fix",
                 "--report", str(valid_report),
@@ -68,7 +67,7 @@ class TestFixHappyPath:
     def test_fix_dry_run_lists_filenames_only(self, valid_report, mock_api_success):
         """--dry-run should list script filenames without printing content."""
         runner = CliRunner()
-        with patch("httpx.post", return_value=mock_api_success):
+        with patch("httpx.AsyncClient.post", return_value=mock_api_success):
             result = runner.invoke(cli, [
                 "fix",
                 "--report", str(valid_report),
@@ -84,7 +83,7 @@ class TestFixHappyPath:
     def test_fix_shows_resolved_packages(self, valid_report, mock_api_success):
         """Output should include resolved packages from API response."""
         runner = CliRunner()
-        with patch("httpx.post", return_value=mock_api_success):
+        with patch("httpx.AsyncClient.post", return_value=mock_api_success):
             result = runner.invoke(cli, [
                 "fix",
                 "--report", str(valid_report),
@@ -97,7 +96,7 @@ class TestFixHappyPath:
     def test_fix_sends_correct_payload(self, valid_report, mock_api_success):
         """API request payload must contain profile_id, target_os, python_version."""
         runner = CliRunner()
-        with patch("httpx.post", return_value=mock_api_success) as mock_post:
+        with patch("httpx.AsyncClient.post", return_value=mock_api_success) as mock_post:
             runner.invoke(cli, [
                 "fix",
                 "--report", str(valid_report),
@@ -114,7 +113,7 @@ class TestFixHappyPath:
     def test_fix_uses_custom_api_url(self, valid_report, mock_api_success):
         """--api-url flag should override the default localhost URL."""
         runner = CliRunner()
-        with patch("httpx.post", return_value=mock_api_success) as mock_post:
+        with patch("httpx.AsyncClient.post", return_value=mock_api_success) as mock_post:
             runner.invoke(cli, [
                 "fix",
                 "--report", str(valid_report),
@@ -133,7 +132,7 @@ class TestFixAPIErrors:
         """ConnectError should print a helpful message and exit 1."""
         import httpx
         runner = CliRunner()
-        with patch("httpx.post", side_effect=httpx.ConnectError("refused")):
+        with patch("httpx.AsyncClient.post", side_effect=httpx.ConnectError("refused")):
             result = runner.invoke(cli, [
                 "fix",
                 "--report", str(valid_report),
@@ -155,7 +154,7 @@ class TestFixAPIErrors:
             "400", request=MagicMock(), response=mock_resp
         )
 
-        with patch("httpx.post", return_value=mock_resp):
+        with patch("httpx.AsyncClient.post", return_value=mock_resp):
             result = runner.invoke(cli, [
                 "fix",
                 "--report", str(valid_report),
@@ -176,7 +175,7 @@ class TestFixAPIErrors:
             "500", request=MagicMock(), response=mock_resp
         )
 
-        with patch("httpx.post", return_value=mock_resp):
+        with patch("httpx.AsyncClient.post", return_value=mock_resp):
             result = runner.invoke(cli, [
                 "fix",
                 "--report", str(valid_report),

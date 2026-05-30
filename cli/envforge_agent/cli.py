@@ -27,7 +27,6 @@ from rich import box
 
 from envforge_agent import __version__
 from envforge_agent.report import ReportBuilder
-from envforge_agent.detectors.system_detector import detect_disk
 from envforge_agent.schemas import DiagnosticReport
 
 from envforge_agent.utils import _map_os_to_target, _extract_python_version
@@ -128,7 +127,10 @@ def cli(ctx: click.Context, no_color: bool) -> None:
 def diagnose(output: str | None, send: bool, api_url: str, quiet: bool, sarif: bool, timeout: int, output_format: str = "json") -> None:
     asyncio.run(_diagnose(output, send, api_url, quiet, sarif, timeout, output_format))
 
-async def _diagnose(output: str | None, send: bool, api_url: str, quiet: bool, sarif: bool, timeout: int, output_format: str = "json") -> None:
+def diagnose(output: str | None, send: bool, api_url: str, quiet: bool, sarif: bool, timeout: int, output_format: str) -> None:
+    asyncio.run(_diagnose(output, send, api_url, quiet, sarif, timeout, output_format))
+
+async def _diagnose(output: str | None, send: bool, api_url: str, quiet: bool, sarif: bool, timeout: int, output_format: str) -> None:
     """
     Collect a full diagnostic report of this machine's ML environment.
     """

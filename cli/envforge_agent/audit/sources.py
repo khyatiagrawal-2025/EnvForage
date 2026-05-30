@@ -71,7 +71,7 @@ class LocalEnvironment(Source):
             entries = json.loads(result.stdout)
         except json.JSONDecodeError as exc:
             raise RuntimeError(
-                f"`pip list` returned malformed JSON output."
+                "`pip list` returned malformed JSON output."
             ) from exc
 
         for entry in entries:
