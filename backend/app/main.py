@@ -29,7 +29,6 @@ from app.database import AsyncSessionLocal
 from app.middleware.payload_size import PayloadSizeLimitMiddleware
 
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manage application startup and shutdown."""
@@ -59,9 +58,8 @@ def create_app() -> FastAPI:
     )
 
     register_exception_handlers(app)
-
     # ── CORS ─────────────────────────────────────────────────
-    
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins_list,
