@@ -18,6 +18,9 @@ Usage:
         cuda_required=True,
     )
 """
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import Version
+
 from app.compatibility.errors import (
     IncompatibilityError,
     UnknownVersionError,
@@ -42,8 +45,7 @@ from app.compatibility.models import (
     ResolvedEnvironment,
     ResolvedPackage,
 )
-from packaging.specifiers import InvalidSpecifier, SpecifierSet
-from packaging.version import Version
+
 
 class CompatibilityResolver:
     """
@@ -231,8 +233,8 @@ class CompatibilityResolver:
             rocm_version=rocm_version,
             cuda_variant=constraint.cuda_variant,
         )
-    
-    
+
+
     def _resolve_version_range(
         self,
         package_name: str,
