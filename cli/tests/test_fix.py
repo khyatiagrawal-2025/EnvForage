@@ -1,15 +1,14 @@
 """
 Integration tests for the `envforge fix` CLI command.
 
-Tests mock the backend API using unittest.mock.patch("httpx.post")
-consistent with the existing test_agent.py patterns.
+Tests mock the backend API using unittest.mock.patch("httpx.AsyncClient")
+to intercept the async HTTP requests sent by the CLI agent.
 """
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
 from click.testing import CliRunner
@@ -48,81 +47,90 @@ def mock_api_success() -> MagicMock:
     return mock_resp
 
 
+@pytest.fixture
+def mock_httpx(mock_api_success):
+    from unittest.mock import AsyncMock
+    mock_client = MagicMock()
+    mock_post = AsyncMock(return_value=mock_api_success)
+    mock_client.post = mock_post
+    
+    mock_class = MagicMock()
+    mock_class.return_value.__aenter__.return_value = mock_client
+    
+    with patch("httpx.AsyncClient", mock_class):
+        yield mock_post
+
+
 class TestFixHappyPath:
     """Happy path tests for envforge fix."""
 
-    def test_fix_displays_script_content(self, valid_report, mock_api_success):
+    def test_fix_displays_script_content(self, valid_report, mock_httpx):
         """Standard run should print script content in a rich panel."""
         runner = CliRunner()
-        with patch("httpx.post", return_value=mock_api_success):
-            result = runner.invoke(cli, [
-                "fix",
-                "--report", str(valid_report),
-                "--profile", "pytorch-cuda",
-            ])
+        result = runner.invoke(cli, [
+            "fix",
+            "--report", str(valid_report),
+            "--profile", "pytorch-cuda",
+        ])
 
         assert result.exit_code == 0
         assert "setup.sh" in result.output
         assert "test-job-123" in result.output
 
-    def test_fix_dry_run_lists_filenames_only(self, valid_report, mock_api_success):
+    def test_fix_dry_run_lists_filenames_only(self, valid_report, mock_httpx):
         """--dry-run should list script filenames without printing content."""
         runner = CliRunner()
-        with patch("httpx.post", return_value=mock_api_success):
-            result = runner.invoke(cli, [
-                "fix",
-                "--report", str(valid_report),
-                "--profile", "pytorch-cuda",
-                "--dry-run",
-            ])
+        result = runner.invoke(cli, [
+            "fix",
+            "--report", str(valid_report),
+            "--profile", "pytorch-cuda",
+            "--dry-run",
+        ])
 
         assert result.exit_code == 0
         assert "setup.sh" in result.output
         # Full script content should NOT appear in dry-run
         assert "pip install torch" not in result.output
 
-    def test_fix_shows_resolved_packages(self, valid_report, mock_api_success):
+    def test_fix_shows_resolved_packages(self, valid_report, mock_httpx):
         """Output should include resolved packages from API response."""
         runner = CliRunner()
-        with patch("httpx.post", return_value=mock_api_success):
-            result = runner.invoke(cli, [
-                "fix",
-                "--report", str(valid_report),
-                "--profile", "pytorch-cuda",
-            ])
+        result = runner.invoke(cli, [
+            "fix",
+            "--report", str(valid_report),
+            "--profile", "pytorch-cuda",
+        ])
 
         assert result.exit_code == 0
         assert "torch==2.3.0" in result.output
 
-    def test_fix_sends_correct_payload(self, valid_report, mock_api_success):
+    def test_fix_sends_correct_payload(self, valid_report, mock_httpx):
         """API request payload must contain profile_id, target_os, python_version."""
         runner = CliRunner()
-        with patch("httpx.post", return_value=mock_api_success) as mock_post:
-            runner.invoke(cli, [
-                "fix",
-                "--report", str(valid_report),
-                "--profile", "pytorch-cuda",
-            ])
+        runner.invoke(cli, [
+            "fix",
+            "--report", str(valid_report),
+            "--profile", "pytorch-cuda",
+        ])
 
-        assert mock_post.called
-        call_kwargs = mock_post.call_args
+        assert mock_httpx.called
+        call_kwargs = mock_httpx.call_args
         payload = call_kwargs[1]["json"] if "json" in call_kwargs[1] else call_kwargs[0][1]
         assert payload["profile_id"] == "pytorch-cuda"
         assert "target_os" in payload
         assert "python_version" in payload
 
-    def test_fix_uses_custom_api_url(self, valid_report, mock_api_success):
+    def test_fix_uses_custom_api_url(self, valid_report, mock_httpx):
         """--api-url flag should override the default localhost URL."""
         runner = CliRunner()
-        with patch("httpx.post", return_value=mock_api_success) as mock_post:
-            runner.invoke(cli, [
-                "fix",
-                "--report", str(valid_report),
-                "--profile", "pytorch-cuda",
-                "--api-url", "http://myserver:9000",
-            ])
+        runner.invoke(cli, [
+            "fix",
+            "--report", str(valid_report),
+            "--profile", "pytorch-cuda",
+            "--api-url", "http://myserver:9000",
+        ])
 
-        called_url = mock_post.call_args[0][0]
+        called_url = mock_httpx.call_args[0][0]
         assert "myserver:9000" in called_url
 
 
@@ -132,8 +140,13 @@ class TestFixAPIErrors:
     def test_fix_exits_on_connect_error(self, valid_report):
         """ConnectError should print a helpful message and exit 1."""
         import httpx
+        from unittest.mock import AsyncMock
         runner = CliRunner()
-        with patch("httpx.post", side_effect=httpx.ConnectError("refused")):
+        mock_post = AsyncMock(side_effect=httpx.ConnectError("refused"))
+        mock_class = MagicMock()
+        mock_class.return_value.__aenter__.return_value.post = mock_post
+
+        with patch("httpx.AsyncClient", mock_class):
             result = runner.invoke(cli, [
                 "fix",
                 "--report", str(valid_report),
@@ -141,11 +154,12 @@ class TestFixAPIErrors:
             ])
 
         assert result.exit_code == 1
-        assert "connect" in result.output.lower() or "connect" in (result.stderr or "").lower()
+        assert "connect" in result.output.lower()
 
     def test_fix_exits_on_http_error(self, valid_report):
         """4xx/5xx API responses should exit with code 1."""
         import httpx
+        from unittest.mock import AsyncMock
         runner = CliRunner()
 
         mock_resp = MagicMock()
@@ -155,7 +169,11 @@ class TestFixAPIErrors:
             "400", request=MagicMock(), response=mock_resp
         )
 
-        with patch("httpx.post", return_value=mock_resp):
+        mock_post = AsyncMock(return_value=mock_resp)
+        mock_class = MagicMock()
+        mock_class.return_value.__aenter__.return_value.post = mock_post
+
+        with patch("httpx.AsyncClient", mock_class):
             result = runner.invoke(cli, [
                 "fix",
                 "--report", str(valid_report),
@@ -167,6 +185,7 @@ class TestFixAPIErrors:
     def test_fix_exits_on_500_error(self, valid_report):
         """500 server error should exit with code 1."""
         import httpx
+        from unittest.mock import AsyncMock
         runner = CliRunner()
 
         mock_resp = MagicMock()
@@ -176,7 +195,11 @@ class TestFixAPIErrors:
             "500", request=MagicMock(), response=mock_resp
         )
 
-        with patch("httpx.post", return_value=mock_resp):
+        mock_post = AsyncMock(return_value=mock_resp)
+        mock_class = MagicMock()
+        mock_class.return_value.__aenter__.return_value.post = mock_post
+
+        with patch("httpx.AsyncClient", mock_class):
             result = runner.invoke(cli, [
                 "fix",
                 "--report", str(valid_report),

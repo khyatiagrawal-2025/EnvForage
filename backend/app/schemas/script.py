@@ -17,7 +17,6 @@ OutputFormat = Literal[
     "docker-compose.yml",
     "devcontainer.json",
     ".gitignore",
-    "pyproject.toml",
     "pyproject.poetry.toml",
 ]
 
@@ -199,7 +198,6 @@ class GenerationResponse(BaseModel):
 class GenerationErrorResponse(BaseModel):
     """Response when compatibility resolution fails."""
 
-
     error: dict[str, Any] = Field(
         ...,
         description="Structured compatibility or validation error payload.",
@@ -210,4 +208,3 @@ class GenerationErrorResponse(BaseModel):
             }
         ],
     )
-

@@ -7,12 +7,12 @@ Never raises — returns empty list if nvidia-smi is not available.
 """
 from __future__ import annotations
 
+import os
+import stat
 import subprocess
 
 import logging
-import re
-import subprocess
-from typing import NamedTuple
+from envforge_agent.detectors.os_detector import _detect_wsl
 from envforge_agent.schemas import GPUInfo
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,69 @@ def detect_gpus(timeout: int = 30) -> list[GPUInfo]:
         return _detect_via_rocm_smi(timeout=timeout)
     except Exception:
         return []
+
+
+def detect_wsl_gpu_passthrough(timeout: int = 30) -> tuple[bool, list[str]]:
+    """
+    Diagnose WSL2 GPU passthrough health.
+
+    Returns a tuple of (available, issues). When running under WSL2,
+    this checks /dev/dxg, nvidia-smi availability, and NVIDIA container
+    toolkit readiness.
+    """
+    issues: list[str] = []
+    if _detect_wsl() != "WSL2":
+        return True, issues
+
+    if not _check_dxg_present():
+        issues.append("Missing /dev/dxg — WSL GPU passthrough is unavailable.")
+
+    if not _check_nvidia_smi(timeout=timeout):
+        issues.append("`nvidia-smi` failed inside WSL2. Verify NVIDIA drivers and WSL integration.")
+
+    if not _check_nvidia_container_toolkit():
+        issues.append("NVIDIA container toolkit not available in WSL2. Docker GPU runtime may be broken.")
+
+    return len(issues) == 0, issues
+
+
+def _check_dxg_present() -> bool:
+    if not os.path.exists("/dev/dxg"):
+        return False
+
+    try:
+        mode = os.stat("/dev/dxg").st_mode
+        return stat.S_ISCHR(mode) or stat.S_ISBLK(mode)
+    except OSError:
+        return False
+
+
+def _check_nvidia_smi(timeout: int = 30) -> bool:
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "-L"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError, OSError):
+        return False
+
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def _check_nvidia_container_toolkit() -> bool:
+    try:
+        result = subprocess.run(
+            ["nvidia-container-cli", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError, OSError):
+        return False
+
+    return result.returncode == 0
 
 
 def _detect_via_nvidia_smi(timeout: int = 30) -> list[GPUInfo]:
@@ -117,6 +180,13 @@ def _detect_via_rocm_smi(timeout: int = 30) -> list[GPUInfo]:
             timeout=timeout,
         )
     except FileNotFoundError:
+        logger.debug("rocm-smi command not found in system path.")
+        return []
+    except subprocess.TimeoutExpired:
+        logger.debug("rocm-smi command timed out after %s seconds.", timeout)
+        return []
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.debug("Unexpected error running rocm-smi: %s", e, exc_info=True)
         return []
 
     if result.returncode != 0:
@@ -133,16 +203,16 @@ def _detect_via_rocm_smi(timeout: int = 30) -> list[GPUInfo]:
     for card_key, info in data.items():
         if not card_key.startswith("card"):
             continue
-            
+
         name = info.get("Product Name", "AMD GPU")
         vram_raw = info.get("VRAM Total Memory (B)", "0")
         driver = info.get("Driver Version")
-        
+
         try:
             vram_gb = round(float(vram_raw) / (1024**3), 2) if vram_raw else None
         except (ValueError, TypeError):
             vram_gb = None
-            
+
         try:
             index = int(card_key.replace("card", ""))
         except ValueError:

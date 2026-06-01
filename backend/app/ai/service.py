@@ -17,7 +17,9 @@ import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.models import SuggestedFix, TroubleshootRequest, TroubleshootResponse
@@ -25,6 +27,7 @@ from app.ai.prompts.system import LOW_CONFIDENCE_GATE, TROUBLESHOOT_SYSTEM_PROMP
 from app.ai.prompts.troubleshoot import TroubleshootPromptBuilder
 from app.ai.providers import get_provider
 from app.ai.providers.base import LLMProvider, LLMProviderError
+from app.middleware.metrics import record_ai_token_usage
 from app.models.ai_session import AIAuditLog, AISession, AISuggestion
 from app.templates.safety import SafetyViolationError, validate_rendered_output
 
@@ -45,8 +48,8 @@ class AITroubleshootService:
         response = await service.troubleshoot(request, db_session)
     """
 
-    def __init__(self,provider: LLMProvider | None = None) -> None:
-        self._provider=provider
+    def __init__(self, provider: LLMProvider | None = None) -> None:
+        self._provider = provider
         self._prompt_builder = TroubleshootPromptBuilder()
 
     async def troubleshoot(
@@ -62,11 +65,7 @@ class AITroubleshootService:
             db: Async database session for audit persistence.
 
         Returns:
-            TroubleshootResponse with root cause analysis and fix suggestions.
-
-        Raises:
-            LLMProviderError: If the LLM call fails after retries.
-            SafetyViolationError: If AI output contains forbidden patterns.
+            Try/Except structured TroubleshootResponse with root cause analysis.
         """
         session_id = str(uuid.uuid4())
         start_time = time.monotonic()
@@ -86,16 +85,18 @@ class AITroubleshootService:
         model_name = getattr(provider, "model", "unknown")
 
         try:
-            # The LLM returns a TroubleshootResponse directly
-            # We need a response model WITHOUT session_id (LLM doesn't know it)
             llm_result = await provider.complete(
                 system_prompt=TROUBLESHOOT_SYSTEM_PROMPT,
                 user_message=user_message,
                 response_model=TroubleshootResponse,
             )
         except LLMProviderError as exc:
-            # Log the failed attempt
             latency_ms = int((time.monotonic() - start_time) * 1000)
+            record_ai_token_usage(
+                provider=provider_name,
+                model=model_name,
+                success=False,
+            )
             await self._log_audit(
                 db,
                 session_id=None,
@@ -109,13 +110,17 @@ class AITroubleshootService:
             raise
 
         # ── Step 3: Safety filter ─────────────────────────────────────────
-        # Validate all text fields in the response
         safety_violation: str | None = None
         try:
             self._validate_response_safety(llm_result)
         except SafetyViolationError as exc:
             safety_violation = str(exc)
             latency_ms = int((time.monotonic() - start_time) * 1000)
+            record_ai_token_usage(
+                provider=provider_name,
+                model=model_name,
+                success=False,
+            )
             await self._log_audit(
                 db,
                 session_id=None,
@@ -146,12 +151,23 @@ class AITroubleshootService:
         # ── Step 5: Persist to DB ─────────────────────────────────────────
         latency_ms = int((time.monotonic() - start_time) * 1000)
         token_usage = getattr(provider, "last_token_usage", None)
+
         if callable(token_usage):
             token_usage = token_usage()
-        elif not isinstance(token_usage, dict):
-            token_usage = getattr(provider, "_last_usage", None)
 
         total_tokens = token_usage.get("total_tokens", 0) if token_usage else 0
+        prompt_tokens = token_usage.get("prompt_tokens", 0) if token_usage else 0
+        completion_tokens = (
+            token_usage.get("completion_tokens", 0) if token_usage else 0
+        )
+
+        record_ai_token_usage(
+            provider=provider_name,
+            model=model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            success=True,
+        )
 
         persist_failed = False
         try:
@@ -186,6 +202,7 @@ class AITroubleshootService:
         )
 
         return llm_result
+
     async def stream_troubleshoot(
         self,
         request: TroubleshootRequest,
@@ -193,11 +210,6 @@ class AITroubleshootService:
     ) -> AsyncIterator[str]:
         """
         Stream the AI troubleshooting response with safety validation.
-
-        All provider tokens are buffered until the response is complete, then
-        the full response is deserialised and validated through the safety
-        filter before any bytes are yielded to the caller. This matches the
-        safety guarantee of the non-streaming path.
         """
         session_id = str(uuid.uuid4())
         start_time = time.monotonic()
@@ -274,8 +286,23 @@ class AITroubleshootService:
             )
             result = await db.execute(stmt)
             return list(result.scalars().all())
-        except Exception as exc:
-            logger.error("Failed to fetch session history for %s: %s", session_id, exc)
+
+        except OperationalError as exc:
+            logger.critical(
+                "Critical database connectivity failure for session %s: %s",
+                session_id,
+                exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database service is temporarily unavailable. Unable to process history request.",
+            )
+        except SQLAlchemyError as exc:
+            logger.error(
+                "Transient database error fetching session history for %s: %s",
+                session_id,
+                exc,
+            )
             return []
 
     # ── Private helpers ───────────────────────────────────────────────────
@@ -287,10 +314,8 @@ class AITroubleshootService:
 
     def _validate_response_safety(self, response: TroubleshootResponse) -> None:
         """Run all text fields through the template SafetyFilter."""
-        # Validate root cause text
         validate_rendered_output(response.root_cause, "ai_root_cause")
 
-        # Validate each suggestion
         for fix in response.suggested_fixes:
             validate_rendered_output(fix.title, "ai_fix_title")
             validate_rendered_output(fix.description, "ai_fix_description")
@@ -307,7 +332,6 @@ class AITroubleshootService:
         model_name: str,
     ) -> None:
         """Persist the AI session and suggestions to the database."""
-
         max_retries = 3
 
         for attempt in range(max_retries):
@@ -320,7 +344,6 @@ class AITroubleshootService:
                 )
 
                 db.add(db_session)
-
                 await db.flush()
 
                 for fix in response.suggested_fixes:
@@ -337,17 +360,13 @@ class AITroubleshootService:
                         template_id=fix.repair_template_id,
                         created_at=datetime.utcnow(),
                     )
-
                     db.add(db_suggestion)
-
                 return
 
             except Exception as exc:
                 await db.rollback()
-                # 1. Use logger.exception to capture the full traceback
-
                 logger.exception(
-                    "Failed to persist AI session " "(attempt %d/%d): %s",
+                    "Failed to persist AI session (attempt %d/%d): %s",
                     attempt + 1,
                     max_retries,
                     exc,
@@ -355,27 +374,21 @@ class AITroubleshootService:
 
                 if attempt < max_retries - 1:
                     logger.warning(
-                        "Retrying AI session persistence" "for session %s",
+                        "Retrying AI session persistencefor session %s",
                         session_id,
                     )
-
                     await asyncio.sleep(1)
                 else:
-                      # 2. On final permanent failure, log critical and raise so troubleshoot() can update the audit log
                     logger.critical(
                         "AI session persistence permanently failed for session %s",
                         session_id,
                     )
                     raise
 
-
         logger.critical(
-            "AI session persistence permanently failed" " for session %s",
+            "AI session persistence permanently failed for session %s",
             session_id,
         )
-
-        # Don't fail the request if persistence fails
-        # The response is still valid
 
     async def _log_audit(
         self,
@@ -406,8 +419,7 @@ class AITroubleshootService:
         except Exception as exc:
             logger.exception("Failed to write audit log to database: %s", exc)
 
-
-#confidence gating
+    # confidence gating
 
     def _gate_fixes(
         self, fixes: list[SuggestedFix], session_id: str
@@ -418,15 +430,18 @@ class AITroubleshootService:
             if (fix.confidence_score or 0.0) < LOW_CONFIDENCE_GATE:
                 logger.warning(
                     "session=%s step=%d '%s' suppressed (score=%.2f < gate=%.2f)",
-                    session_id, fix.step, fix.title,
-                    fix.confidence_score, LOW_CONFIDENCE_GATE,
+                    session_id,
+                    fix.step,
+                    fix.title,
+                    fix.confidence_score,
+                    LOW_CONFIDENCE_GATE,
                 )
                 suppressed += 1
             else:
                 accepted.append(fix)
         return accepted, suppressed
 
-    #Overall confidence recalculation
+    # Overall confidence recalculation
 
     def _recalculate_overall_confidence(self, fixes: list[SuggestedFix]) -> float:
         """
@@ -444,7 +459,7 @@ class AITroubleshootService:
             total_w += w
         return round(weighted_sum / total_w, 4)
 
-    #Audit logging
+    # Audit logging
 
     def _log_confidence_audit(
         self, session_id: str, fixes: list[SuggestedFix], suppressed: int
@@ -452,24 +467,38 @@ class AITroubleshootService:
         for fix in fixes:
             logger.info(
                 "CONFIDENCE_AUDIT session=%s step=%d level=%s score=%.2f matrix_backed=%s severity=%s",
-                session_id, fix.step, fix.confidence_level.value if fix.confidence_level else "unknown",
-                fix.confidence_score, fix.is_matrix_backed, fix.severity,
+                session_id,
+                fix.step,
+                fix.confidence_level.value if fix.confidence_level else "unknown",
+                fix.confidence_score,
+                fix.is_matrix_backed,
+                fix.severity,
             )
         if suppressed:
-            logger.info("CONFIDENCE_AUDIT session=%s suppressed_fixes=%d", session_id, suppressed)
+            logger.info(
+                "CONFIDENCE_AUDIT session=%s suppressed_fixes=%d",
+                session_id,
+                suppressed,
+            )
 
-    #Prompt builder
+    # Prompt builder
 
     def _build_user_message(self, request: TroubleshootRequest) -> str:
         parts = [
-            "## Diagnostic Report", json.dumps(request.diagnostic, indent=2), "",
-            "## Verification Results", json.dumps(request.verification, indent=2), "",
-            "## Environment Profile", json.dumps(request.profile, indent=2),
+            "## Diagnostic Report",
+            json.dumps(request.diagnostic, indent=2),
+            "",
+            "## Verification Results",
+            json.dumps(request.verification, indent=2),
+            "",
+            "## Environment Profile",
+            json.dumps(request.profile, indent=2),
         ]
         if request.user_description.strip():
             parts += ["", "## User Description", request.user_description.strip()]
         parts += [
-            "", "## Instructions",
+            "",
+            "## Instructions",
             f"Return a TroubleshootResponse JSON. Max {request.max_words} words. "
             "Populate confidence_level, confidence_score, is_matrix_backed, "
             "uncertainty_reason, and fallback_recommendation for EVERY SuggestedFix.",
