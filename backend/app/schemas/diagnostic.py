@@ -6,16 +6,19 @@ from pydantic import BaseModel, Field
 class OSInfo(BaseModel):
     name: str = Field(
         ...,
+        max_length=128,
         description="Operating system name.",
         examples=["Ubuntu 22.04"],
     )
     version: str = Field(
         ...,
+        max_length=32,
         description="Operating system version.",
         examples=["22.04"],
     )
     architecture: str = Field(
         ...,
+        max_length=32,
         description="CPU architecture of the operating system.",
         examples=["x86_64"],
     )
@@ -29,6 +32,7 @@ class OSInfo(BaseModel):
 class CPUInfo(BaseModel):
     brand: str = Field(
         ...,
+        max_length=256,
         description="CPU model or brand name.",
         examples=["AMD Ryzen 7 7840HS"],
     )
@@ -60,6 +64,7 @@ class RAMInfo(BaseModel):
 class GPUInfo(BaseModel):
     name: str = Field(
         ...,
+        max_length=256,
         description="GPU model name.",
         examples=["NVIDIA RTX 4060 Laptop GPU"],
     )
@@ -70,6 +75,7 @@ class GPUInfo(BaseModel):
     )
     driver_version: str | None = Field(
         None,
+        max_length=32,
         description="Installed GPU driver version.",
         examples=["555.85"],
     )
@@ -119,11 +125,13 @@ class ROCMInfo(BaseModel):
 class PythonInfo(BaseModel):
     version: str = Field(
         ...,
+        max_length=20,
         description="Installed Python version.",
         examples=["3.11.4"],
     )
     path: str = Field(
         ...,
+        max_length=512,
         description="Filesystem path to the Python executable.",
         examples=["/usr/bin/python3"],
     )
