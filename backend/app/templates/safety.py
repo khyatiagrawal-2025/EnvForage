@@ -10,6 +10,7 @@ import asyncio
 import concurrent.futures
 import json
 import logging
+import os
 import re
 import subprocess
 from typing import Any
@@ -174,7 +175,31 @@ def _validate_bash_ast(content: str, template_name: str = "") -> None:
                     cmd_parts = getattr(part, "parts", [])
                     if cmd_parts and hasattr(cmd_parts[0], "word"):
                         cmd_name = cmd_parts[0].word
-                        if cmd_name in ("sh", "bash", "dash", "zsh", "ksh") and i > 0:
+                        cmd_basename = os.path.basename(cmd_name.replace("\\", "/"))
+                        is_shell_target = False
+                        matched_shell_name = cmd_name
+                        if cmd_basename in ("sh", "bash", "dash", "zsh", "ksh"):
+                            is_shell_target = True
+                        elif (
+                            cmd_basename == "env"
+                            and len(cmd_parts) > 1
+                            and hasattr(cmd_parts[1], "word")
+                        ):
+                            next_cmd_name = cmd_parts[1].word
+                            next_cmd_basename = os.path.basename(
+                                next_cmd_name.replace("\\", "/")
+                            )
+                            if next_cmd_basename in (
+                                "sh",
+                                "bash",
+                                "dash",
+                                "zsh",
+                                "ksh",
+                            ):
+                                is_shell_target = True
+                                matched_shell_name = f"env {next_cmd_name}"
+
+                        if is_shell_target and i > 0:
                             # Allow whitelisted bootstrapping URLs for curl/wget piped to shell
                             is_whitelisted = False
                             first_part = pipeline_parts[0]
@@ -215,7 +240,7 @@ def _validate_bash_ast(content: str, template_name: str = "") -> None:
                                                         pass
                             if not is_whitelisted:
                                 violations.append(
-                                    f"Pipe-to-shell detected in pipeline: {cmd_name}"
+                                    f"Pipe-to-shell detected in pipeline: {matched_shell_name}"
                                 )
 
         # Rule 4: Shell execution commands with dynamic arguments
@@ -223,7 +248,12 @@ def _validate_bash_ast(content: str, template_name: str = "") -> None:
             parts = getattr(node, "parts", [])
             if parts and hasattr(parts[0], "word"):
                 cmd_name = parts[0].word
-                if cmd_name in (
+                cmd_basename = os.path.basename(cmd_name.replace("\\", "/"))
+                target_cmd_name = cmd_name
+                args_to_check: list[Any] = []
+                is_shell_exec = False
+
+                shells_and_helpers = (
                     "sh",
                     "bash",
                     "dash",
@@ -232,11 +262,31 @@ def _validate_bash_ast(content: str, template_name: str = "") -> None:
                     "source",
                     ".",
                     "exec",
+                )
+
+                if cmd_basename in shells_and_helpers:
+                    is_shell_exec = True
+                    target_cmd_name = cmd_name
+                    args_to_check = parts[1:]
+                elif (
+                    cmd_basename == "env"
+                    and len(parts) > 1
+                    and hasattr(parts[1], "word")
                 ):
-                    for arg in parts[1:]:
+                    next_cmd_name = parts[1].word
+                    next_cmd_basename = os.path.basename(
+                        next_cmd_name.replace("\\", "/")
+                    )
+                    if next_cmd_basename in shells_and_helpers:
+                        is_shell_exec = True
+                        target_cmd_name = f"env {next_cmd_name}"
+                        args_to_check = parts[2:]
+
+                if is_shell_exec:
+                    for arg in args_to_check:
                         if has_substitution(arg):
                             violations.append(
-                                f"Shell command '{cmd_name}' executed with dynamic subshell/substitution: {arg.word if hasattr(arg, 'word') else ''}"
+                                f"Shell command '{target_cmd_name}' executed with dynamic subshell/substitution: {arg.word if hasattr(arg, 'word') else ''}"
                             )
 
     def traverse(node: Any, parent_pipeline: Any = None) -> None:

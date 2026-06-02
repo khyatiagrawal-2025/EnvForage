@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
 	output: "standalone",
-	allowedDevOrigins: ["192.168.1.14"],
+	allowedDevOrigins: ["192.168.1.14", "192.168.1.37"],
 	async rewrites() {
 		const backendApiUrl =
 			process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL;
@@ -21,4 +22,7 @@ const nextConfig: NextConfig = {
 	},
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+	silent: true, // Suppresses all logs
+	widenClientFileUpload: true,
+});
