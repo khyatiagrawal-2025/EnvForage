@@ -48,7 +48,7 @@ async def list_cached_profiles(
     if redis:
         filter_dict = filters.model_dump()
         filter_str = json.dumps(filter_dict, sort_keys=True)
-        cache_key = f"profiles:list:{filter_str}"
+        cache_key = f"profiles:list:inc_pkgs={include_packages}:{filter_str}"
         cached_data = await redis.get(cache_key)
         if cached_data:
             data = json.loads(cached_data)
@@ -56,7 +56,11 @@ async def list_cached_profiles(
 
     profiles, total = await list_profiles(db, filters, include_packages)
     
-    profiles_data = [ProfileSummarySchema.model_validate(p).model_dump(mode="json") for p in profiles]
+    if include_packages:
+        profiles_data = [ProfileDetailSchema.model_validate(p).model_dump(mode="json") for p in profiles]
+    else:
+        profiles_data = [ProfileSummarySchema.model_validate(p).model_dump(mode="json") for p in profiles]
+        
     if redis and cache_key:
         cache_data = {"profiles": profiles_data, "total": total}
         await redis.setex(cache_key, 300, json.dumps(cache_data))
