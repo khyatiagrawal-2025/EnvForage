@@ -226,11 +226,18 @@ class AITroubleshootService:
         logger.info("Starting troubleshoot stream (provider=%s)", provider_name)
 
         chunks: list[str] = []
+        _STREAM_BUFFER_LIMIT = 512 * 1024  # 512 KB
+        _buffer_size = 0
         async for chunk in provider.stream(
             system_prompt=TROUBLESHOOT_SYSTEM_PROMPT,
             user_message=user_message,
             response_model=TroubleshootResponse,
         ):
+            _buffer_size += len(chunk.encode())
+            if _buffer_size > _STREAM_BUFFER_LIMIT:
+                logger.warning("Stream buffer limit exceeded for session %s", session_id)
+                yield '{"error":"STREAM_LIMIT_EXCEEDED","message":"Response too large — blocked by safety limit."}'
+                return
             chunks.append(chunk)
 
         full_response = "".join(chunks)
