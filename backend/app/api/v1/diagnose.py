@@ -32,7 +32,6 @@ from app.schemas.diagnostic import (
     DiagnoseResponse,
     DiagnosticReportSchema,
 )
-from app.schemas.profile import ProfileFilters
 from app.services.profile_service import get_all_active_profiles
 from app.templates.safety import SafetyViolationError, validate_rendered_output
 
