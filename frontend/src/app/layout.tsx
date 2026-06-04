@@ -40,6 +40,14 @@ export const metadata: Metadata = {
 	title: "EnvForage | ML Environment Provisioning",
 	description:
 		"Generate intelligent, safe, and deterministic ML/AI environment setup scripts.",
+	openGraph: {
+		title: "EnvForage | ML Environment Provisioning",
+		description:
+			"Generate intelligent, safe, and deterministic ML/AI environment setup scripts.",
+		url: BASE_URL,
+		siteName: "EnvForage",
+		locale: "en_US",
+		type: "website",
 	twitter: {
 		card: "summary_large_image",
 		title: "EnvForage | ML Environment Provisioning",
