@@ -27,7 +27,12 @@ class UserRepository:
     async def create_user(
         self, email: str, fname: str, lname: str, hashed_password: str
     ) -> User:
-        """Create and persist a new user account."""
+        """Create and persist a new user account.
+
+        Note: The session is flushed here so the row is visible within the
+        current transaction.  Commit/rollback is the responsibility of the
+        caller's session dependency (``app.database.get_db``).
+        """
         user = User(
             email=email,
             fname=fname,
@@ -35,6 +40,6 @@ class UserRepository:
             password=hashed_password,
         )
         self.db.add(user)
-        await self.db.commit()
-        await self.db.refresh(user)
+        await self.db.flush()  # write to DB within the open transaction
+        await self.db.refresh(user)  # populate server-generated defaults (id, created_at)
         return user

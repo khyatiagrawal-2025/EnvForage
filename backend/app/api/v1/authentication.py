@@ -1,24 +1,25 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from jose import jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel, EmailStr
-from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel, EmailStr, Field
 
+from app.api.deps import DB
 from app.config import get_settings
-from app.database import AsyncSessionLocal
 from app.services.user_repository import UserRepository
 
 router = APIRouter()
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
+# ── Request schemas ────────────────────────────────────────────────────────────
+
 class RegData(BaseModel):
     fname: str
     lname: str
     email: EmailStr
-    password: str
+    password: str = Field(min_length=6, description="Must be at least 6 characters")
 
 
 class LoginData(BaseModel):
@@ -26,30 +27,35 @@ class LoginData(BaseModel):
     password: str
 
 
-async def get_db() -> AsyncSession:
-    """Get database session dependency."""
-    async with AsyncSessionLocal() as session:
-        yield session
+# ── Response schemas ───────────────────────────────────────────────────────────
+
+class MessageResponse(BaseModel):
+    message: str
 
 
-@router.post("/signup")
-async def signup(data: RegData, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+class TokenResponse(BaseModel):
+    token: str
+    email: EmailStr
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@router.post("/signup", response_model=MessageResponse)
+async def signup(data: RegData, db: DB) -> MessageResponse:
     repo = UserRepository(db)
     if await repo.user_exists(data.email):
         raise HTTPException(status_code=400, detail="Email already registered")
-    if len(data.password) < 6:
-        raise HTTPException(status_code=400, detail="Password too short")
     await repo.create_user(
         email=data.email,
         fname=data.fname,
         lname=data.lname,
         hashed_password=pwd.hash(data.password),
     )
-    return {"message": "Account created successfully"}
+    return MessageResponse(message="Account created successfully")
 
 
-@router.post("/signin")
-async def signin(data: LoginData, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+@router.post("/signin", response_model=TokenResponse)
+async def signin(data: LoginData, db: DB) -> TokenResponse:
     repo = UserRepository(db)
     user = await repo.get_user_by_email(data.email)
     if not user or not pwd.verify(data.password, user.password):
@@ -59,4 +65,5 @@ async def signin(data: LoginData, db: AsyncSession = Depends(get_db)) -> dict[st
     token = jwt.encode(
         {"email": data.email, "exp": exp}, settings.secret_key, algorithm="HS256"
     )
-    return {"token": token, "email": data.email}
+    return TokenResponse(token=token, email=data.email)
+
