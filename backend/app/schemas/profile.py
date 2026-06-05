@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 class PackageSpecSchema(BaseModel):
     package_name: str = Field(
         ...,
+        pattern=r"^[A-Za-z0-9._-]+$",
         description="Name of the package to install.",
         examples=["torch"],
     )
