@@ -30,7 +30,7 @@ from envforge_agent.report import ReportBuilder
 from envforge_agent.schemas import DiagnosticReport
 from envforge_agent.detectors import detect_wsl_gpu_passthrough
 
-from envforge_agent.utils import _map_os_to_target, _extract_python_version
+from envforge_agent.utils import _map_os_to_target, _extract_python_version, check_for_updates
 from envforge_agent.audit import audit_command
 
 console = Console()
@@ -70,6 +70,7 @@ def cli(ctx: click.Context, no_color: bool) -> None:
     ctx.ensure_object(dict)
     _reinit_consoles(no_color)
     check_macos_support()
+    check_for_updates()
 
 
 # ── envforge diagnose ──────────────────────────────────────────────────────────
